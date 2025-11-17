@@ -3,5 +3,6 @@ documentation: "https://github.com/shoparize/shoparize-gtm-template/blob/master/
 versions:
   # Latest version
   - sha: c86eae8a1ceba5cac8c24e0a9a44f9f5f23c1bab
+    changeNotes: Fixed issue with GTM template not working correctly.
+  - sha: 27b9ccc0d5e36faa85697bcac9c89a59409f65fb
     changeNotes: Initial release of Shoparize Partner Tracking template for Google Tag Manager.
-
