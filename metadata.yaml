@@ -1,5 +1,5 @@
 homepage: "https://partner.shoparize.com"
-documentation: "https://github.com/shoparize/shoparize-gtm-template/blob/main/README.md"
+documentation: "https://github.com/shoparize/shoparize-gtm-template/blob/master/README.md"
 versions:
   # Latest version
   - sha: 9f4365bc6c864f779caa216851c4c0e0a96f6db8
