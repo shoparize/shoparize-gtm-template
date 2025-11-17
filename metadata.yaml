@@ -2,6 +2,8 @@ homepage: "https://partner.shoparize.com"
 documentation: "https://github.com/shoparize/shoparize-gtm-template/blob/master/README.md"
 versions:
   # Latest version
+  - sha: a6fab14fb4276cdbbe0c9b95462f18731962d669
+    changeNotes: Updated template.
   - sha: c86eae8a1ceba5cac8c24e0a9a44f9f5f23c1bab
     changeNotes: Fixed issue with GTM template not working correctly.
   - sha: 27b9ccc0d5e36faa85697bcac9c89a59409f65fb
