@@ -1,0 +1,7 @@
+homepage: "https://partner.shoparize.com"
+documentation: "https://github.com/shoparize/shoparize-gtm-template/blob/main/README.md"
+versions:
+  # Latest version
+  - sha: REPLACE_WITH_ACTUAL_SHA_AFTER_FIRST_COMMIT
+    changeNotes: Initial release of Shoparize Partner Tracking template for Google Tag Manager.
+
