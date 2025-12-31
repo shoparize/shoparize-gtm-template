@@ -158,7 +158,7 @@ In the conversion tracking tag, reference your variables:
 
 1. In GTM Preview mode, visit:
    ```
-   https://your-website.com/?utm_source=shoparize&utm_medium=affiliate
+   https://your-website.com/?utm_source=Shoparize&utm_campaign=EAIaIQobChMI0q_2sM_1-AIVlKnVCh1KPwubEAQYBSABEgJ4Z_D_BwE_____EAIaIQobChMI0q_2sM_1-AIVlKnVCh1KPwubEAQYBSABEgJ4Z_D_BwE_____CjkKCQjwt7SWBhD-ARIoADl0M-UACUEUCM9EiMkioEB5EF--gmZEEXcTh7VLGn4f-z1ZPD30EBoCwnE_____0AAAAADcddnZl8pG8T-TPDcIUN9QKAEDKZ&utm_medium=Shoparize Google Ads&gclid=EAIaIQobChMI0q_2sM_1-AIVlKnVCh1KPwubEAQYBSABEgJ4Z_D_BwE
    ```
 
 2. Check **Tag Assistant**:
