@@ -137,138 +137,143 @@ ___TEMPLATE_PARAMETERS___
 
 ___SANDBOXED_JS_FOR_WEB_TEMPLATE___
 
-const log = require('logToConsole');
-const injectScript = require('injectScript');
-const queryPermission = require('queryPermission');
-const callInWindow = require('callInWindow');
-const createQueue = require('createQueue');
-const copyFromWindow = require('copyFromWindow');
-const setInWindow = require('setInWindow');
-const getCookieValues = require('getCookieValues');
-const setCookie = require('setCookie');
-const getUrl = require('getUrl');
-const getTimestampMillis = require('getTimestampMillis');
-const sendPixel = require('sendPixel');
-const encodeUriComponent = require('encodeUriComponent');
-const JSON = require('JSON');
-const makeString = require('makeString');
-const makeNumber = require('makeNumber');
+var log = require('logToConsole');
+var injectScript = require('injectScript');
+var callInWindow = require('callInWindow');
+var copyFromWindow = require('copyFromWindow');
+var setInWindow = require('setInWindow');
+var JSON = require('JSON');
+var makeNumber = require('makeNumber');
 
-const scriptUrl = 'https://partner-cdn.shoparize.com/js/shoparize.js';
+var scriptUrl = 'https://partner-cdn.shoparize.com/js/shoparize.js';
+var shopId = makeNumber(data.shopId);
 
 log('Shoparize: Starting tag, type:', data.trackingType);
+log('Shoparize: Tag configuration data:', data);
 
-// Helper function to get cookie
-const getCookie = (name) => {
-  const values = getCookieValues(name);
-  return values && values.length > 0 ? values[0] : '';
-};
+function parseItems() {
+  if (!data.items) {
+    return undefined;
+  }
 
-// Helper function to set cookie
-const setShoparizeCookie = (name, value) => {
-  const options = {
-    domain: 'auto',
-    path: '/',
-    'max-age': 2592000, // 30 days
-    secure: true,
-    samesite: 'Lax'
+  if (typeof data.items === 'object') {
+    return data.items;
+  }
+
+  var parsed = JSON.parse(data.items);
+  if (parsed === undefined) {
+    log('Shoparize: Unable to parse items JSON, sending raw value');
+    return data.items;
+  }
+  return parsed;
+}
+
+function ensureDataLayerShoparize() {
+  var dl = copyFromWindow('dataLayerShoparize');
+  if (!dl || !dl.push) {
+    dl = [];
+    setInWindow('dataLayerShoparize', dl);
+  }
+  return dl;
+}
+
+function buildPurchaseEvent() {
+  var ecommerce = {
+    transaction_id: data.transactionId || '',
+    currency: data.currency || 'EUR'
   };
-  setCookie(name, value, options);
-};
 
-// Initialize tracking
-const initTracking = () => {
-  const urlParams = getUrl();
-  const utmSource = getUrl('utm_source') || '';
-  
-  if (utmSource.toLowerCase().indexOf('shoparize') > -1) {
-    const timestamp = getTimestampMillis();
-    const keywords = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'msclkid', 'gclid', 'wbraid', 'gbraid', 'click_id'];
-    
-    setShoparizeCookie('_partner_click_time', makeString(timestamp));
-    
-    keywords.forEach(key => {
-      const value = getUrl(key);
-      if (value) {
-        setShoparizeCookie('_partner_' + key, value);
+  if (data.value !== undefined) {
+    ecommerce.value = makeNumber(data.value);
+  }
+  if (data.tax !== undefined) {
+    ecommerce.tax = makeNumber(data.tax);
+  }
+  if (data.shipping !== undefined) {
+    ecommerce.shipping = makeNumber(data.shipping);
+  }
+
+  var items = parseItems();
+  if (items !== undefined) {
+    ecommerce.items = items;
+  }
+
+  return {
+    event: 'purchase',
+    ecommerce: ecommerce
+  };
+}
+
+function withShoparizeApi(callback) {
+  injectScript(
+    scriptUrl,
+    function() {
+      var api = callInWindow('SHOPARIZE_API');
+
+      if (!api) {
+        log('Shoparize: SHOPARIZE_API not found on window');
+        data.gtmOnFailure();
+        return;
       }
-    });
-    
-    // Send click tracking pixel
-    const clickData = {
-      shopId: makeNumber(data.shopId),
-      _partner_click_time: timestamp
-    };
-    
-    keywords.forEach(key => {
-      const value = getUrl(key);
-      if (value) {
-        clickData['_partner_' + key] = value;
-      }
-    });
-    
-    const pixelUrl = 'https://partner.shoparize.com/api/incoming/click?x-partner=allow&data=' + 
-                     encodeUriComponent(JSON.stringify(clickData));
-    
-    sendPixel(pixelUrl, () => {
-      log('Shoparize: Click tracked successfully');
+
+      callback(api);
+    },
+    data.gtmOnFailure
+  );
+}
+
+// Initialize click tracking on all pages except the thank-you page.
+function initTracking() {
+  withShoparizeApi(function(api) {
+    if (api.init) {
+      api.init(shopId);
+      log('Shoparize: init called for shop', shopId);
       data.gtmOnSuccess();
-    }, data.gtmOnFailure);
-  } else {
-    log('Shoparize: Not Shoparize traffic, skipping click tracking');
-    data.gtmOnSuccess();
-  }
-};
-
-// Conversion tracking
-const conversionTracking = () => {
-  const utmSource = getCookie('_partner_utm_source');
-  const isShoparizeTraffic = utmSource && utmSource.toLowerCase().indexOf('shoparize') > -1;
-  
-  if (data.sendOnlyShoparize && !isShoparizeTraffic) {
-    log('Shoparize: Not Shoparize traffic, skipping conversion');
-    data.gtmOnSuccess();
-    return;
-  }
-  
-  const convData = {
-    shopId: makeNumber(data.shopId),
-    transaction_time: getTimestampMillis()
-  };
-  
-  // Add partner cookies
-  const partnerKeys = ['_partner_utm_source', '_partner_utm_medium', '_partner_utm_campaign', 
-                       '_partner_utm_term', '_partner_msclkid', '_partner_gclid', 
-                       '_partner_wbraid', '_partner_gbraid', '_partner_click_id', '_partner_click_time'];
-  
-  partnerKeys.forEach(key => {
-    convData[key] = getCookie(key);
+    } else {
+      log('Shoparize: init() missing on SHOPARIZE_API');
+      data.gtmOnFailure();
+    }
   });
-  
-  // Add conversion data
-  if (data.transactionId) {
-    const dataLayerShoparize = [{
-      event: 'purchase',
-      ecommerce: {
-        transaction_id: data.transactionId,
-        value: data.value,
-        tax: data.tax,
-        shipping: data.shipping,
-        currency: data.currency || 'EUR',
-        items: data.items
+}
+
+// Conversion tracking on the order success page.
+function conversionTracking() {
+  withShoparizeApi(function(api) {
+    // Build the purchase event
+    var purchaseEvent = buildPurchaseEvent();
+    log('Shoparize: Built purchase event:', JSON.stringify(purchaseEvent));
+    
+    // Set the data layer AFTER script loads but BEFORE calling conv
+    // Create new array instead of using push to avoid sandbox issues
+    var existingDl = copyFromWindow('dataLayerShoparize');
+    var dl = [];
+    
+    // Copy existing items if any
+    if (existingDl && existingDl.length) {
+      for (var i = 0; i < existingDl.length; i++) {
+        dl[i] = existingDl[i];
       }
-    }];
-    convData.dataLayerShoparize = dataLayerShoparize;
-  }
-  
-  const pixelUrl = 'https://partner.shoparize.com/api/incoming/conv?x-partner=allow&data=' + 
-                   encodeUriComponent(JSON.stringify(convData));
-  
-  sendPixel(pixelUrl, () => {
-    log('Shoparize: Conversion tracked successfully');
-    data.gtmOnSuccess();
-  }, data.gtmOnFailure);
-};
+    }
+    
+    // Add the purchase event
+    dl[dl.length] = purchaseEvent;
+    
+    setInWindow('dataLayerShoparize', dl, true);
+    
+    // Verify it was set
+    var verifyDl = copyFromWindow('dataLayerShoparize');
+    log('Shoparize: dataLayerShoparize after setting:', JSON.stringify(verifyDl));
+    
+    if (api.conv) {
+      api.conv(shopId);
+      log('Shoparize: conv called for shop', shopId);
+      data.gtmOnSuccess();
+    } else {
+      log('Shoparize: conv() missing on SHOPARIZE_API');
+      data.gtmOnFailure();
+    }
+  });
+}
 
 // Main execution
 if (data.trackingType === 'init') {
@@ -305,114 +310,12 @@ ___WEB_PERMISSIONS___
   {
     "instance": {
       "key": {
-        "publicId": "send_pixel",
+        "publicId": "access_globals",
         "versionId": "1"
       },
       "param": [
         {
-          "key": "allowedUrls",
-          "value": {
-            "type": 1,
-            "string": "specific"
-          }
-        },
-        {
-          "key": "urls",
-          "value": {
-            "type": 2,
-            "listItem": [
-              {
-                "type": 1,
-                "string": "https://partner.shoparize.com/*"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    "clientAnnotations": {
-      "isEditedByUser": true
-    },
-    "isRequired": true
-  },
-  {
-    "instance": {
-      "key": {
-        "publicId": "get_cookies",
-        "versionId": "1"
-      },
-      "param": [
-        {
-          "key": "cookieAccess",
-          "value": {
-            "type": 1,
-            "string": "specific"
-          }
-        },
-        {
-          "key": "cookieNames",
-          "value": {
-            "type": 2,
-            "listItem": [
-              {
-                "type": 1,
-                "string": "_partner_utm_source"
-              },
-              {
-                "type": 1,
-                "string": "_partner_utm_medium"
-              },
-              {
-                "type": 1,
-                "string": "_partner_utm_campaign"
-              },
-              {
-                "type": 1,
-                "string": "_partner_utm_term"
-              },
-              {
-                "type": 1,
-                "string": "_partner_msclkid"
-              },
-              {
-                "type": 1,
-                "string": "_partner_gclid"
-              },
-              {
-                "type": 1,
-                "string": "_partner_wbraid"
-              },
-              {
-                "type": 1,
-                "string": "_partner_gbraid"
-              },
-              {
-                "type": 1,
-                "string": "_partner_click_id"
-              },
-              {
-                "type": 1,
-                "string": "_partner_click_time"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    "clientAnnotations": {
-      "isEditedByUser": true
-    },
-    "isRequired": true
-  },
-  {
-    "instance": {
-      "key": {
-        "publicId": "set_cookies",
-        "versionId": "1"
-      },
-      "param": [
-        {
-          "key": "allowedCookies",
+          "key": "keys",
           "value": {
             "type": 2,
             "listItem": [
@@ -421,45 +324,76 @@ ___WEB_PERMISSIONS___
                 "mapKey": [
                   {
                     "type": 1,
-                    "string": "name"
+                    "string": "key"
                   },
                   {
                     "type": 1,
-                    "string": "domain"
+                    "string": "read"
                   },
                   {
                     "type": 1,
-                    "string": "path"
+                    "string": "write"
                   },
                   {
                     "type": 1,
-                    "string": "secure"
-                  },
-                  {
-                    "type": 1,
-                    "string": "session"
+                    "string": "execute"
                   }
                 ],
                 "mapValue": [
                   {
                     "type": 1,
-                    "string": "_partner_*"
+                    "string": "SHOPARIZE_API"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
                   },
                   {
                     "type": 1,
-                    "string": "*"
+                    "string": "read"
                   },
                   {
                     "type": 1,
-                    "string": "*"
+                    "string": "write"
                   },
                   {
                     "type": 1,
-                    "string": "any"
-                  },
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
                   {
                     "type": 1,
-                    "string": "any"
+                    "string": "dataLayerShoparize"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
                   }
                 ]
               }
@@ -476,48 +410,26 @@ ___WEB_PERMISSIONS___
   {
     "instance": {
       "key": {
-        "publicId": "get_url",
+        "publicId": "inject_script",
         "versionId": "1"
       },
       "param": [
         {
-          "key": "urlParts",
+          "key": "urls",
           "value": {
-            "type": 1,
-            "string": "any"
-          }
-        },
-        {
-          "key": "queriesAllowed",
-          "value": {
-            "type": 1,
-            "string": "any"
+            "type": 2,
+            "listItem": [
+              {
+                "type": 1,
+                "string": "https://partner-cdn.shoparize.com/js/shoparize.js"
+              }
+            ]
           }
         }
       ]
     },
     "clientAnnotations": {
       "isEditedByUser": true
-    },
-    "isRequired": true
-  },
-  {
-    "instance": {
-      "key": {
-        "publicId": "access_globals",
-        "versionId": "1"
-      },
-      "param": []
-    },
-    "isRequired": true
-  },
-  {
-    "instance": {
-      "key": {
-        "publicId": "inject_script",
-        "versionId": "1"
-      },
-      "param": []
     },
     "isRequired": true
   }
